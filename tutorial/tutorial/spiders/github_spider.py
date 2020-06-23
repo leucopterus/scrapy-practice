@@ -13,7 +13,7 @@ class GithubSpider(scrapy.Spider):
         'https://github.com/search?p=1&q=python&type=Repositories'
     ]
 
-    def __init__(self, start=1, limit=10, lists=True, items=True, *args, **kwargs):
+    def __init__(self, start=1, limit=100, lists=True, items=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         start, limit = int(start), int(limit)
         self.start = start
@@ -59,7 +59,7 @@ class GithubSpider(scrapy.Spider):
                                       link_number=link_number,
                                   ))
 
-        self._controller_sleep(150)
+        self._controller_sleep(60)
         gc.collect()
 
         if self.next_page_number <= self.limit:
