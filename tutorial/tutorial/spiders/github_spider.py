@@ -20,6 +20,7 @@ class GithubSpider(scrapy.Spider):
         self.limit = limit + start - 1
         self.print_list = bool(json.loads(str(lists).lower()))
         self.print_item = bool(json.loads(str(items).lower()))
+        self.visited_repos_urls = set()
         self.next_page_number = None
         self.repos_data_mask = {
             'page': None,
@@ -51,13 +52,15 @@ class GithubSpider(scrapy.Spider):
                 links_json.write(json.dumps(dict(data=repos_urls)))
 
         for link_number, repo_url in enumerate(repos_urls, start=1):
-            yield response.follow(repo_url,
-                                  callback=self.parse_repos,
-                                  dont_filter=True,
-                                  cb_kwargs=dict(
-                                      page_number=self.next_page_number-1,
-                                      link_number=link_number,
-                                  ))
+            if repo_url not in self.visited_repos_urls:
+                self.visited_repos_urls.add(repo_url)
+                yield response.follow(repo_url,
+                                      callback=self.parse_repos,
+                                      dont_filter=True,
+                                      cb_kwargs=dict(
+                                          page_number=self.next_page_number-1,
+                                          link_number=link_number,
+                                      ))
 
         self._controller_sleep(60)
         gc.collect()
