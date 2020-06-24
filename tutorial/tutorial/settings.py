@@ -115,22 +115,23 @@ class Settings:
         self.config.read(self.file_path)
 
         self.credentials = self.config['Credentials']
-        self.initial_query = self.config['Query']
-        self.output = self.config['Output']
+        self.login = self.credentials.get('LOGIN', 'test')
+        self.password = self.credentials.get('PASSWORD', 'qwerty123')
 
         self.query_keys_query = self.config['QueryKeys']['QUERY']
         self.query_keys_page = self.config['QueryKeys']['PAGE']
 
-        self.login = self.credentials.get('LOGIN', 'test')
-        self.password = self.credentials.get('PASSWORD', 'qwerty123')
+        self.parameters = self.config['Parameters']
+        self.domain = self.parameters['DOMAIN']
+        self.start = self.parameters['START_PAGE_NUMBER']
+        self.limit = self.parameters['NUMBER_OF_PAGES']
+        self.print_list = self.parameters['SHOW_LINKS_PER_SEARCH_PAGE']
+        self.print_item = self.parameters['SHOW_REPOSITORY_INFO_SEPARATELY']
+        self._query_line = '+'.join(self.parameters['QUERY'].split(' '))
+        self.query = f'/search?{self.query_keys_page}=' + self.start + \
+                     f'&{self.query_keys_query}=' + self._query_line
 
-        self.query_line = '+'.join(self.initial_query.get('QUERY').split(' '))
-        self.page = self.initial_query.get('PAGE')
-
-        self.query = f'/search?{self.query_keys_page}=' + self.page + \
-                     f'&{self.query_keys_query}=' + self.query_line
-
-        self.output = self.output.get('FORMAT')
+        self.output_excel_file = self.config['Output'].get('EXCEL')
 
 
 settings = Settings(file_path=os.path.join(BASE_DIR, 'config.ini'))

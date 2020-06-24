@@ -25,18 +25,11 @@ class GithubSpider(scrapy.Spider):
     ]
 
     def __init__(self, start=1, limit=10,
-                 lists=True, items=True,
+                 lists=False, items=False,
                  login=None, password=None,
-                 query=False, *args, **kwargs):
+                 config=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        start, limit = int(start), int(limit)
-        self.use_query_settings = bool(json.loads(str(query).lower()))
-        self.start = start
-        self.limit = limit + start - 1
-        self.login = login if not self.use_query_settings else settings.login
-        self.password = password if not self.use_query_settings else settings.password
-        self.print_list = bool(json.loads(str(lists).lower()))
-        self.print_item = bool(json.loads(str(items).lower()))
+        self.wb_path = None
         self.visited_repos_urls = set()
         self.next_page_number = None
         self.repos_data_mask = {
@@ -45,30 +38,40 @@ class GithubSpider(scrapy.Spider):
             'repo': None,
             'commit': None
         }
-        self.wb_path = None
-        if start != 1 and not self.use_query_settings:
-            url = self.start_urls[-1]
-            current_page_in_url_index = url.find('p=')
-            url = url[:current_page_in_url_index+2] + str(start) + url[url.find('&', current_page_in_url_index):]
-            self.start_urls[-1] = url
+        start, limit = int(start), int(limit)
+        self.use_query_settings = bool(json.loads(str(config).lower()))
         if self.use_query_settings:
-            headers = ['link', 'commit']
-            self.wb_path = os.path.join(BASE_DIR, 'output.xlsx')
-            wb = openpyxl.Workbook()
-            wb.save(self.wb_path)
-            wb.close()
-            self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+            self.start = int(settings.start) if settings.start.isdigit() else start
+            self.limit = int(settings.limit) if settings.start.isdigit() else limit
+            self.limit = self.limit + self.start - 1
+            self.login = settings.login if settings.login else None
+            self.password = settings.password if settings.password else None
+            self.print_list = bool(json.loads(str(settings.print_list).lower()))
+            self.print_item = bool(json.loads(str(settings.print_item).lower()))
+            self.domain = settings.domain or self.domain
+            self.start_urls = [''.join([self.domain, settings.query])]
+            self.wb_path = os.path.join(BASE_DIR, settings.output_excel_file) if settings.output_excel_file else None
+            if self.wb_path:
+                wb = openpyxl.Workbook()
+                wb.save(self.wb_path)
+                wb.close()
+                headers = ['link', 'commit']
+                self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+        else:
+            self.start = start
+            self.limit = limit + start - 1
+            self.login = login
+            self.password = password
+            self.print_list = bool(json.loads(str(lists).lower()))
+            self.print_item = bool(json.loads(str(items).lower()))
 
-    def _fill_excel_with_data(self, url, commit):
-        wb = openpyxl.load_workbook(filename=self.wb_path)
-        ws = wb.active
-        ws.append([url, commit])
-        wb.save(self.wb_path)
-        wb.close()
+            if start != 1 and not self.use_query_settings:
+                url = self.start_urls[-1]
+                current_page_in_url_index = url.find('p=')
+                url = url[:current_page_in_url_index + 2] + str(start) + url[url.find('&', current_page_in_url_index):]
+                self.start_urls[-1] = url
 
     def start_requests(self):
-        if self.use_query_settings:
-            self.start_urls = [''.join([self.domain, settings.query])]
         yield scrapy.Request(
             url='https://github.com/login',
             method='GET',
@@ -181,6 +184,13 @@ class GithubSpider(scrapy.Spider):
         self.crawler.engine.pause()
         time.sleep(seconds)
         self.crawler.engine.unpause()
+
+    def _fill_excel_with_data(self, url, commit):
+        wb = openpyxl.load_workbook(filename=self.wb_path)
+        ws = wb.active
+        ws.append([url, commit])
+        wb.save(self.wb_path)
+        wb.close()
 
 
 class GithubLoginSpider(scrapy.Spider):
