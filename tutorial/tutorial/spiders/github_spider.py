@@ -2,32 +2,39 @@ import copy
 import gc
 import json
 import time
+import os
 
 import scrapy
+import openpyxl
+
+from ..settings import settings, BASE_DIR
 
 
 def auth_failed(response):
     return not (response.status == 200 and
-             response.request.method == 'GET' and
-             response.request.url == 'https://github.com')
+                response.request.method == 'GET' and
+                response.request.url == 'https://github.com')
 
 
 class GithubSpider(scrapy.Spider):
     name = 'github'
 
+    domain = 'https://github.com'
     start_urls = [
         'https://github.com/search?p=1&q=python&type=Repositories',
     ]
 
-    def __init__(self, start=1, limit=100,
+    def __init__(self, start=1, limit=10,
                  lists=True, items=True,
-                 login=None, password=None, *args, **kwargs):
+                 login=None, password=None,
+                 query=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         start, limit = int(start), int(limit)
+        self.use_query_settings = bool(json.loads(str(query).lower()))
         self.start = start
         self.limit = limit + start - 1
-        self.login = login
-        self.password = password
+        self.login = login if not self.use_query_settings else settings.login
+        self.password = password if not self.use_query_settings else settings.password
         self.print_list = bool(json.loads(str(lists).lower()))
         self.print_item = bool(json.loads(str(items).lower()))
         self.visited_repos_urls = set()
@@ -38,13 +45,30 @@ class GithubSpider(scrapy.Spider):
             'repo': None,
             'commit': None
         }
-        if start != 1:
+        self.wb_path = None
+        if start != 1 and not self.use_query_settings:
             url = self.start_urls[-1]
             current_page_in_url_index = url.find('p=')
             url = url[:current_page_in_url_index+2] + str(start) + url[url.find('&', current_page_in_url_index):]
             self.start_urls[-1] = url
+        if self.use_query_settings:
+            headers = ['link', 'commit']
+            self.wb_path = os.path.join(BASE_DIR, 'output.xlsx')
+            wb = openpyxl.Workbook()
+            wb.save(self.wb_path)
+            wb.close()
+            self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+
+    def _fill_excel_with_data(self, url, commit):
+        wb = openpyxl.load_workbook(filename=self.wb_path)
+        ws = wb.active
+        ws.append([url, commit])
+        wb.save(self.wb_path)
+        wb.close()
 
     def start_requests(self):
+        if self.use_query_settings:
+            self.start_urls = [''.join([self.domain, settings.query])]
         yield scrapy.Request(
             url='https://github.com/login',
             method='GET',
@@ -53,12 +77,15 @@ class GithubSpider(scrapy.Spider):
         )
 
     def log_in(self, response):
-        if (self.login and self.password) is not None:
+        if bool(self.login) and bool(self.password):
             return scrapy.FormRequest.from_response(
                 response,
                 formdata={'login': self.login, 'password': self.password},
                 callback=self.after_login,
             )
+        else:
+            for url in self.start_urls:
+                yield scrapy.Request(url, dont_filter=True)
 
     def after_login(self, response):
         if auth_failed(response):
@@ -118,6 +145,9 @@ class GithubSpider(scrapy.Spider):
                 with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
                     json_doc.write(json.dumps(repos_data))
 
+            if self.wb_path:
+                self._fill_excel_with_data(response.url, repos_data['commit'])
+
             yield repos_data
 
         else:
@@ -141,6 +171,9 @@ class GithubSpider(scrapy.Spider):
         if self.print_item:
             with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
                 json_doc.write(json.dumps(repos_data))
+
+        if self.wb_path:
+            self._fill_excel_with_data(self.domain+repo, repos_data['commit'])
 
         yield repos_data
 

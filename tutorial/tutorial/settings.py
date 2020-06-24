@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+import configparser
 
 # Scrapy settings for tutorial project
 #
@@ -95,3 +97,40 @@ DOWNLOADER_MIDDLEWARES = {
     'scrapy.downloadermiddlewares.retry.RetryMiddleware': None,
     'tutorial.middlewares.TooManyRequestsRetryMiddleware': 543,
 }
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+class Settings:
+    @staticmethod
+    def _normalize_path(path):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'No such file - {path}')
+        return path
+
+    def __init__(self, file_path):
+        self.file_path = self._normalize_path(file_path)
+        self.config = configparser.ConfigParser()
+        self.config.read(self.file_path)
+
+        self.credentials = self.config['Credentials']
+        self.initial_query = self.config['Query']
+        self.output = self.config['Output']
+
+        self.query_keys_query = self.config['QueryKeys']['QUERY']
+        self.query_keys_page = self.config['QueryKeys']['PAGE']
+
+        self.login = self.credentials.get('LOGIN', 'test')
+        self.password = self.credentials.get('PASSWORD', 'qwerty123')
+
+        self.query_line = '+'.join(self.initial_query.get('QUERY').split(' '))
+        self.page = self.initial_query.get('PAGE')
+
+        self.query = f'/search?{self.query_keys_page}=' + self.page + \
+                     f'&{self.query_keys_query}=' + self.query_line
+
+        self.output = self.output.get('FORMAT')
+
+
+settings = Settings(file_path=os.path.join(BASE_DIR, 'config.ini'))
