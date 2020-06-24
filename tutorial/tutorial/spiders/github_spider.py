@@ -81,7 +81,7 @@ class GithubSpider(scrapy.Spider):
 
     def log_in(self, response):
         if bool(self.login) and bool(self.password):
-            return scrapy.FormRequest.from_response(
+            yield scrapy.FormRequest.from_response(
                 response,
                 formdata={'login': self.login, 'password': self.password},
                 callback=self.after_login,
