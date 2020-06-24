@@ -16,7 +16,6 @@ class GithubSpider(scrapy.Spider):
     name = 'github'
 
     start_urls = [
-        'https://github.com/login',
         'https://github.com/search?p=1&q=python&type=Repositories',
     ]
 
@@ -40,12 +39,20 @@ class GithubSpider(scrapy.Spider):
             'commit': None
         }
         if start != 1:
-            url = self.start_urls[0]
+            url = self.start_urls[-1]
             current_page_in_url_index = url.find('p=')
             url = url[:current_page_in_url_index+2] + str(start) + url[url.find('&', current_page_in_url_index):]
-            self.start_urls[0] = url
+            self.start_urls[-1] = url
 
-    def parse(self, response):
+    def start_requests(self):
+        yield scrapy.Request(
+            url='https://github.com/login',
+            method='GET',
+            encoding='utf-8',
+            callback=self.log_in,
+        )
+
+    def log_in(self, response):
         if (self.login and self.password) is not None:
             return scrapy.FormRequest.from_response(
                 response,
@@ -53,15 +60,15 @@ class GithubSpider(scrapy.Spider):
                 callback=self.after_login,
             )
 
-    def after_login(self, response, response_search):
+    def after_login(self, response):
         if auth_failed(response):
-            self.logger.error('Not logged in!/n')
-            return
+            self.logger.error('Not logged in!')
+        else:
+            self.logger.info('Successfully logged in!')
+        for url in self.start_urls:
+            yield scrapy.Request(url, dont_filter=True)
 
-        self.logger.info('Successfully logged in!/n')
-        yield response.follow(response_search.url, callback=self.parse_search)
-
-    def parse_search(self, response):
+    def parse(self, response):
         next_page_url = response.css('a.next_page').xpath('@href').get()
         if next_page_url is not None:
             [self.next_page_number] = [int(item.split('=')[1])
@@ -93,7 +100,7 @@ class GithubSpider(scrapy.Spider):
         gc.collect()
 
         if self.next_page_number <= self.limit:
-            yield response.follow(next_page_url, callback=self.parse_search)
+            yield response.follow(next_page_url, callback=self.parse)
 
     def parse_repos(self, response, page_number, link_number):
         repo = response.url.split('github.com/')[1]
@@ -147,7 +154,7 @@ class GithubLoginSpider(scrapy.Spider):
     name = 'githublogin'
 
     start_urls = [
-        'https://github.com/login',
+        'https://google.com/',
     ]
 
     def __init__(self, login=None, password=None, *args, **kwargs):
@@ -155,7 +162,15 @@ class GithubLoginSpider(scrapy.Spider):
         self.login = login
         self.password = password
 
-    def parse(self, response):
+    def start_requests(self):
+        yield scrapy.Request(
+            url='https://github.com/login',
+            method='GET',
+            encoding='utf-8',
+            callback=self.log_in,
+        )
+
+    def log_in(self, response):
         if (self.login and self.password) is not None:
             return scrapy.FormRequest.from_response(
                 response,
@@ -165,7 +180,12 @@ class GithubLoginSpider(scrapy.Spider):
 
     def after_login(self, response):
         if auth_failed(response):
-            self.logger.error('Not logged in!/n')
-            return
+            self.logger.error('Not logged in!')
+        else:
+            self.logger.info('Successfully logged in!')
+        for url in self.start_urls:
+            yield scrapy.Request(url, dont_filter=True)
 
-        self.logger.info('Successfully logged in!/n')
+    def parse(self, response):
+        for _ in range(20):
+            self.logger.info('In PARSE method!')
