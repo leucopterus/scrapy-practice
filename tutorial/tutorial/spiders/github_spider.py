@@ -107,7 +107,7 @@ class GithubSpider(scrapy.Spider):
         if 'Cannot retrieve the latest commit at this time' not in response.text:
             repos_data = copy.copy(self.repos_data_mask)
 
-            repos_last_commit = response.css('a.commit-tease-sha.mr-1::text').get()
+            repos_last_commit = response.css('a.link-gray.text-small::text').get()
 
             repos_data['page'] = page_number
             repos_data['link'] = link_number
@@ -121,7 +121,7 @@ class GithubSpider(scrapy.Spider):
             yield repos_data
 
         else:
-            page_with_commits_url = response.css('ul.numbers-summary li.commits a').xpath('@href').get()
+            page_with_commits_url = response.css('ul.list-style-none.d-flex li.ml-3 a.link-gray-dark').xpath('@href').get()
             yield response.follow(page_with_commits_url,
                                   callback=self.parse_commits,
                                   cb_kwargs=dict(
@@ -131,7 +131,7 @@ class GithubSpider(scrapy.Spider):
                                   ))
 
     def parse_commits(self, response, page_number, link_number, repo):
-        repos_last_commit = response.css('ol.commit-group.Box li.commit div.commit-links-group a.sha::text').get()
+        repos_last_commit = response.css('ol.commit-group.Box li.commit div.commit-links-group a.sha::text').get()  # !
         repos_data = copy.copy(self.repos_data_mask)
         repos_data['page'] = page_number
         repos_data['link'] = link_number
