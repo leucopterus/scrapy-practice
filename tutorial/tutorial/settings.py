@@ -118,18 +118,22 @@ class Settings:
         self.login = self.credentials.get('LOGIN', 'test')
         self.password = self.credentials.get('PASSWORD', 'qwerty123')
 
-        self.query_keys_query = self.config['QueryKeys']['QUERY']
-        self.query_keys_page = self.config['QueryKeys']['PAGE']
+        self.query_keys_query = self.config['QueryKeys'].get('QUERY')
+        self.query_keys_page = self.config['QueryKeys'].get('PAGE')
 
         self.parameters = self.config['Parameters']
-        self.domain = self.parameters['DOMAIN']
-        self.start = self.parameters['START_PAGE_NUMBER']
-        self.limit = self.parameters['NUMBER_OF_PAGES']
-        self.print_list = self.parameters['SHOW_LINKS_PER_SEARCH_PAGE']
-        self.print_item = self.parameters['SHOW_REPOSITORY_INFO_SEPARATELY']
-        self._query_line = '+'.join(self.parameters['QUERY'].split(' '))
+        self.domain = self.parameters.get('DOMAIN')
+        self.start = self.parameters.get('START_PAGE_NUMBER')
+        self.limit = self.parameters.get('NUMBER_OF_PAGES')
+        self.print_list = self.parameters.get('SHOW_LINKS_PER_SEARCH_PAGE')
+        self.print_item = self.parameters.get('SHOW_REPOSITORY_INFO_SEPARATELY')
+        self._query_line = '+'.join(self.parameters.get('QUERY').split(' '))
         self.query = f'/search?{self.query_keys_page}=' + self.start + \
                      f'&{self.query_keys_query}=' + self._query_line
+
+        self.cookies = self.config['Cookies']
+        self.get_cookies_file = self.cookies.get('COOKIES_INPUT')
+        self.set_cookies_file = self.cookies.get('COOKIES_OUTPUT')
 
         self.output_excel_file = self.config['Output'].get('EXCEL')
 

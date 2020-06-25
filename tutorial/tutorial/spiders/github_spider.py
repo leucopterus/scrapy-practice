@@ -41,35 +41,43 @@ class GithubSpider(scrapy.Spider):
         start, limit = int(start), int(limit)
         self.use_query_settings = bool(json.loads(str(config).lower()))
         if self.use_query_settings:
-            self.start = int(settings.start) if settings.start.isdigit() else start
-            self.limit = int(settings.limit) if settings.start.isdigit() else limit
-            self.limit = self.limit + self.start - 1
-            self.login = settings.login if settings.login else None
-            self.password = settings.password if settings.password else None
-            self.print_list = bool(json.loads(str(settings.print_list).lower()))
-            self.print_item = bool(json.loads(str(settings.print_item).lower()))
-            self.domain = settings.domain or self.domain
-            self.start_urls = [''.join([self.domain, settings.query])]
-            self.wb_path = os.path.join(BASE_DIR, settings.output_excel_file) if settings.output_excel_file else None
-            if self.wb_path:
-                wb = openpyxl.Workbook()
-                wb.save(self.wb_path)
-                wb.close()
-                headers = ['link', 'commit']
-                self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+            self._init_with_settings(start, limit)
         else:
-            self.start = start
-            self.limit = limit + start - 1
-            self.login = login
-            self.password = password
-            self.print_list = bool(json.loads(str(lists).lower()))
-            self.print_item = bool(json.loads(str(items).lower()))
+            self._init_with_console(login, password, start, limit, lists, items)
 
-            if start != 1 and not self.use_query_settings:
-                url = self.start_urls[-1]
-                current_page_in_url_index = url.find('p=')
-                url = url[:current_page_in_url_index + 2] + str(start) + url[url.find('&', current_page_in_url_index):]
-                self.start_urls[-1] = url
+    def _init_with_settings(self, start, limit):
+        self.start = int(settings.start) if settings.start.isdigit() else start
+        self.limit = int(settings.limit) if settings.start.isdigit() else limit
+        self.limit = self.limit + self.start - 1
+        self.login = settings.login if settings.login else None
+        self.password = settings.password if settings.password else None
+        self.print_list = bool(json.loads(str(settings.print_list).lower()))
+        self.print_item = bool(json.loads(str(settings.print_item).lower()))
+        self.domain = settings.domain or self.domain
+        self.start_urls = [''.join([self.domain, settings.query])]
+        self.get_cookies_path = os.path.join(BASE_DIR, settings.get_cookies_file) if settings.get_cookies_file else None
+        self.set_cookies_path = os.path.join(BASE_DIR, settings.set_cookies_file) if settings.set_cookies_file else None
+        self.wb_path = os.path.join(BASE_DIR, settings.output_excel_file) if settings.output_excel_file else None
+        if self.wb_path:
+            wb = openpyxl.Workbook()
+            wb.save(self.wb_path)
+            wb.close()
+            headers = ['link', 'commit']
+            self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+
+    def _init_with_console(self, login, password, start, limit, lists, items):
+        self.start = start
+        self.limit = limit + start - 1
+        self.login = login
+        self.password = password
+        self.print_list = bool(json.loads(str(lists).lower()))
+        self.print_item = bool(json.loads(str(items).lower()))
+
+        if start != 1 and not self.use_query_settings:
+            url = self.start_urls[-1]
+            current_page_in_url_index = url.find('p=')
+            url = url[:current_page_in_url_index + 2] + str(start) + url[url.find('&', current_page_in_url_index):]
+            self.start_urls[-1] = url
 
     def start_requests(self):
         yield scrapy.Request(
@@ -80,7 +88,11 @@ class GithubSpider(scrapy.Spider):
         )
 
     def log_in(self, response):
-        if bool(self.login) and bool(self.password):
+        cookies = self._read_cookies()
+        if cookies:
+            for url in self.start_urls:
+                yield scrapy.Request(url, cookies=cookies, dont_filter=True)
+        elif bool(self.login) and bool(self.password):
             yield scrapy.FormRequest.from_response(
                 response,
                 formdata={'login': self.login, 'password': self.password},
@@ -95,6 +107,8 @@ class GithubSpider(scrapy.Spider):
             self.logger.error('Not logged in!')
         else:
             self.logger.info('Successfully logged in!')
+            self._write_cookies(response)
+
         for url in self.start_urls:
             yield scrapy.Request(url, dont_filter=True)
 
@@ -191,6 +205,23 @@ class GithubSpider(scrapy.Spider):
         ws.append([url, commit])
         wb.save(self.wb_path)
         wb.close()
+
+    def _write_cookies(self, response):
+        if hasattr(self, 'set_cookies_path') and self.set_cookies_path:
+            site_cookies = response.request.headers.get('Cookie').decode('utf-8').split(';')
+            with open(self.set_cookies_path, 'w') as set_cookie:
+                for cookie in site_cookies:
+                    set_cookie.write(cookie + '\n')
+
+    def _read_cookies(self):
+        if hasattr(self, 'get_cookies_path') and self.get_cookies_path:
+            cookies_from_file = []
+            if os.path.isfile(self.get_cookies_path):
+                with open(self.get_cookies_path, 'r') as get_cookies:
+                    for line in get_cookies:
+                        cookies_from_file.append(line)
+            if cookies_from_file:
+                return {item.strip().split('=')[0]: item.strip().split('=')[1] for item in cookies_from_file}
 
 
 class GithubLoginSpider(scrapy.Spider):
