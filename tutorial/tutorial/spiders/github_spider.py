@@ -8,6 +8,7 @@ import scrapy
 import openpyxl
 
 from ..settings import settings, BASE_DIR
+from ..items import GitHubRepoInfoItem
 
 
 class GithubSpider(scrapy.Spider):
@@ -26,12 +27,6 @@ class GithubSpider(scrapy.Spider):
         self.wb_path = None
         self.visited_repos_urls = set()
         self.next_page_number = None
-        self.repos_data_mask = {
-            'page': None,
-            'link': None,
-            'repo': None,
-            'commit': None
-        }
         start, limit = int(start), int(limit)
         self.use_query_settings = bool(json.loads(str(config).lower()))
         if self.use_query_settings:
@@ -56,8 +51,7 @@ class GithubSpider(scrapy.Spider):
             wb = openpyxl.Workbook()
             wb.save(self.wb_path)
             wb.close()
-            headers = ['link', 'commit']
-            self._fill_excel_with_data(url=headers[0], commit=headers[-1])
+            self._fill_excel_with_data()
 
     def _init_with_console(self, login, password, start, limit, lists, items):
         self.start = start
@@ -170,21 +164,21 @@ class GithubSpider(scrapy.Spider):
     def parse_repos(self, response, page_number, link_number):
         repo = response.url.split('github.com/')[1]
         if 'Cannot retrieve the latest commit at this time' not in response.text:
-            repos_data = copy.copy(self.repos_data_mask)
-
             repos_last_commit = response.css('a.link-gray.text-small::text').get()
-
-            repos_data['page'] = page_number
-            repos_data['link'] = link_number
-            repos_data['repo'] = repo
-            repos_data['commit'] = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
+            commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
+            repos_data = GitHubRepoInfoItem(
+                page=page_number,
+                link=link_number,
+                repo=repo,
+                commit=commit,
+            )
 
             if self.print_item:
                 with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
-                    json_doc.write(json.dumps(repos_data))
+                    json_doc.write(str(repos_data))
 
             if self.wb_path:
-                self._fill_excel_with_data(response.url, repos_data['commit'])
+                self._fill_excel_with_data(repos_data)
 
             yield repos_data
 
@@ -200,18 +194,20 @@ class GithubSpider(scrapy.Spider):
 
     def parse_commits(self, response, page_number, link_number, repo):
         repos_last_commit = response.css('ol.commit-group.Box li.commit div.commit-links-group a.sha::text').get()  # !
-        repos_data = copy.copy(self.repos_data_mask)
-        repos_data['page'] = page_number
-        repos_data['link'] = link_number
-        repos_data['repo'] = repo
-        repos_data['commit'] = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
+        commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
+        repos_data = GitHubRepoInfoItem(
+            page=page_number,
+            link=link_number,
+            repo=repo,
+            commit=commit,
+        )
 
         if self.print_item:
             with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
-                json_doc.write(json.dumps(repos_data))
+                json_doc.write(str(repos_data))
 
         if self.wb_path:
-            self._fill_excel_with_data(self.domain+repo, repos_data['commit'])
+            self._fill_excel_with_data(repos_data)
 
         yield repos_data
 
@@ -220,9 +216,11 @@ class GithubSpider(scrapy.Spider):
         time.sleep(seconds)
         self.crawler.engine.unpause()
 
-    def _fill_excel_with_data(self, url, commit):
+    def _fill_excel_with_data(self, data=None):
+        if data is None:
+            data = {'repo': 'link', 'commit': 'commit'}
         wb = openpyxl.load_workbook(filename=self.wb_path)
         ws = wb.active
-        ws.append([url, commit])
+        ws.append([data.get('repo'), data.get('commit')])
         wb.save(self.wb_path)
         wb.close()

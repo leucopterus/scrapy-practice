@@ -6,6 +6,7 @@
 # See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 
 
-class TutorialPipeline:
+class ExcelPipeline:
     def process_item(self, item, spider):
+        item['repo'] = 'https://github.com/' + item.get('repo')
         return item
