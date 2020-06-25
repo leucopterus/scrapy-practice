@@ -10,12 +10,6 @@ import openpyxl
 from ..settings import settings, BASE_DIR
 
 
-def auth_failed(response):
-    return not (response.status == 200 and
-                response.request.method == 'GET' and
-                response.request.url == 'https://github.com')
-
-
 class GithubSpider(scrapy.Spider):
     name = 'github'
 
@@ -80,30 +74,33 @@ class GithubSpider(scrapy.Spider):
             self.start_urls[-1] = url
 
     def start_requests(self):
+        cookies = self._read_cookies() or {}
         yield scrapy.Request(
             url='https://github.com/login',
             method='GET',
+            cookies=cookies,
             encoding='utf-8',
-            callback=self.log_in,
+            callback=self._log_in,
         )
 
-    def log_in(self, response):
-        cookies = self._read_cookies()
-        if cookies:
-            for url in self.start_urls:
-                yield scrapy.Request(url, cookies=cookies, dont_filter=True)
-        elif bool(self.login) and bool(self.password):
-            yield scrapy.FormRequest.from_response(
-                response,
-                formdata={'login': self.login, 'password': self.password},
-                callback=self.after_login,
-            )
+    def _log_in(self, response):
+        if self._auth_failed(response):
+            if bool(self.login) and bool(self.password):
+                yield scrapy.FormRequest.from_response(
+                    response,
+                    formdata={'login': self.login, 'password': self.password},
+                    callback=self._after_login,
+                )
+            else:
+                for url in self.start_urls:
+                    yield scrapy.Request(url, dont_filter=True)
         else:
+            self._write_cookies(response)
             for url in self.start_urls:
                 yield scrapy.Request(url, dont_filter=True)
 
-    def after_login(self, response):
-        if auth_failed(response):
+    def _after_login(self, response):
+        if self._auth_failed(response):
             self.logger.error('Not logged in!')
         else:
             self.logger.info('Successfully logged in!')
@@ -111,6 +108,30 @@ class GithubSpider(scrapy.Spider):
 
         for url in self.start_urls:
             yield scrapy.Request(url, dont_filter=True)
+
+    def _auth_failed(self, response):
+        return not (
+                response.status == 200 and
+                response.request.method == 'GET' and
+                (response.request.url in [self.domain, self.domain+'/'])
+        )
+
+    def _write_cookies(self, response):
+        if hasattr(self, 'set_cookies_path') and self.set_cookies_path:
+            site_cookies = response.request.headers.get('Cookie').decode('utf-8').split(';')
+            with open(self.set_cookies_path, 'w') as set_cookie:
+                for cookie in site_cookies:
+                    set_cookie.write(cookie + '\n')
+
+    def _read_cookies(self):
+        if hasattr(self, 'get_cookies_path') and self.get_cookies_path:
+            cookies_from_file = []
+            if os.path.isfile(self.get_cookies_path):
+                with open(self.get_cookies_path, 'r') as get_cookies:
+                    for line in get_cookies:
+                        cookies_from_file.append(line)
+            if cookies_from_file:
+                return {item.strip().split('=')[0]: item.strip().split('=')[1] for item in cookies_from_file}
 
     def parse(self, response):
         next_page_url = response.css('a.next_page').xpath('@href').get()
@@ -205,61 +226,3 @@ class GithubSpider(scrapy.Spider):
         ws.append([url, commit])
         wb.save(self.wb_path)
         wb.close()
-
-    def _write_cookies(self, response):
-        if hasattr(self, 'set_cookies_path') and self.set_cookies_path:
-            site_cookies = response.request.headers.get('Cookie').decode('utf-8').split(';')
-            with open(self.set_cookies_path, 'w') as set_cookie:
-                for cookie in site_cookies:
-                    set_cookie.write(cookie + '\n')
-
-    def _read_cookies(self):
-        if hasattr(self, 'get_cookies_path') and self.get_cookies_path:
-            cookies_from_file = []
-            if os.path.isfile(self.get_cookies_path):
-                with open(self.get_cookies_path, 'r') as get_cookies:
-                    for line in get_cookies:
-                        cookies_from_file.append(line)
-            if cookies_from_file:
-                return {item.strip().split('=')[0]: item.strip().split('=')[1] for item in cookies_from_file}
-
-
-class GithubLoginSpider(scrapy.Spider):
-    name = 'githublogin'
-
-    start_urls = [
-        'https://google.com/',
-    ]
-
-    def __init__(self, login=None, password=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.login = login
-        self.password = password
-
-    def start_requests(self):
-        yield scrapy.Request(
-            url='https://github.com/login',
-            method='GET',
-            encoding='utf-8',
-            callback=self.log_in,
-        )
-
-    def log_in(self, response):
-        if (self.login and self.password) is not None:
-            return scrapy.FormRequest.from_response(
-                response,
-                formdata={'login': self.login, 'password': self.password},
-                callback=self.after_login,
-            )
-
-    def after_login(self, response):
-        if auth_failed(response):
-            self.logger.error('Not logged in!')
-        else:
-            self.logger.info('Successfully logged in!')
-        for url in self.start_urls:
-            yield scrapy.Request(url, dont_filter=True)
-
-    def parse(self, response):
-        for _ in range(20):
-            self.logger.info('In PARSE method!')

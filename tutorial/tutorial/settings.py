@@ -113,29 +113,31 @@ class Settings:
         self.file_path = self._normalize_path(file_path)
         self.config = configparser.ConfigParser()
         self.config.read(self.file_path)
+        credentials = self.config['Credentials'] if 'Credentials' in self.config.sections() else {}
+        query_keys = self.config['QueryKeys'] if 'QueryKeys' in self.config.sections() else {}
+        parameters = self.config['Parameters'] if 'Parameters' in self.config.sections() else {}
+        cookies = self.config['Cookies'] if 'Cookies' in self.config.sections() else {}
+        output = self.config['Output'] if 'Output' in self.config.sections() else {}
 
-        self.credentials = self.config['Credentials']
-        self.login = self.credentials.get('LOGIN', 'test')
-        self.password = self.credentials.get('PASSWORD', 'qwerty123')
+        self.login = credentials.get('LOGIN', 'test')
+        self.password = credentials.get('PASSWORD', 'qwerty123')
 
-        self.query_keys_query = self.config['QueryKeys'].get('QUERY')
-        self.query_keys_page = self.config['QueryKeys'].get('PAGE')
+        self.query_keys_query = query_keys.get('QUERY', 'q')
+        self.query_keys_page = query_keys.get('PAGE', 'p')
 
-        self.parameters = self.config['Parameters']
-        self.domain = self.parameters.get('DOMAIN')
-        self.start = self.parameters.get('START_PAGE_NUMBER')
-        self.limit = self.parameters.get('NUMBER_OF_PAGES')
-        self.print_list = self.parameters.get('SHOW_LINKS_PER_SEARCH_PAGE')
-        self.print_item = self.parameters.get('SHOW_REPOSITORY_INFO_SEPARATELY')
-        self._query_line = '+'.join(self.parameters.get('QUERY').split(' '))
+        self.domain = parameters.get('DOMAIN', 'https://github.com')
+        self.start = parameters.get('START_PAGE_NUMBER', '1')
+        self.limit = parameters.get('NUMBER_OF_PAGES', '0')
+        self.print_list = parameters.get('SHOW_LINKS_PER_SEARCH_PAGE', 'false')
+        self.print_item = parameters.get('SHOW_REPOSITORY_INFO_SEPARATELY', 'false')
+        _query_line = '+'.join(parameters.get('QUERY').split(' ')) if parameters.get('QUERY') else None
         self.query = f'/search?{self.query_keys_page}=' + self.start + \
-                     f'&{self.query_keys_query}=' + self._query_line
+                     f'&{self.query_keys_query}=' + _query_line
 
-        self.cookies = self.config['Cookies']
-        self.get_cookies_file = self.cookies.get('COOKIES_INPUT')
-        self.set_cookies_file = self.cookies.get('COOKIES_OUTPUT')
+        self.get_cookies_file = cookies.get('COOKIES_INPUT')
+        self.set_cookies_file = cookies.get('COOKIES_OUTPUT')
 
-        self.output_excel_file = self.config['Output'].get('EXCEL')
+        self.output_excel_file = output.get('EXCEL')
 
 
 settings = Settings(file_path=os.path.join(BASE_DIR, 'config.ini'))
