@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+import configparser
 
 # Scrapy settings for tutorial project
 #
@@ -95,3 +97,45 @@ DOWNLOADER_MIDDLEWARES = {
     'scrapy.downloadermiddlewares.retry.RetryMiddleware': None,
     'tutorial.middlewares.TooManyRequestsRetryMiddleware': 543,
 }
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+class Settings:
+    @staticmethod
+    def _normalize_path(path):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'No such file - {path}')
+        return path
+
+    def __init__(self, file_path):
+        self.file_path = self._normalize_path(file_path)
+        self.config = configparser.ConfigParser()
+        self.config.read(self.file_path)
+
+        self.credentials = self.config['Credentials']
+        self.login = self.credentials.get('LOGIN', 'test')
+        self.password = self.credentials.get('PASSWORD', 'qwerty123')
+
+        self.query_keys_query = self.config['QueryKeys'].get('QUERY')
+        self.query_keys_page = self.config['QueryKeys'].get('PAGE')
+
+        self.parameters = self.config['Parameters']
+        self.domain = self.parameters.get('DOMAIN')
+        self.start = self.parameters.get('START_PAGE_NUMBER')
+        self.limit = self.parameters.get('NUMBER_OF_PAGES')
+        self.print_list = self.parameters.get('SHOW_LINKS_PER_SEARCH_PAGE')
+        self.print_item = self.parameters.get('SHOW_REPOSITORY_INFO_SEPARATELY')
+        self._query_line = '+'.join(self.parameters.get('QUERY').split(' '))
+        self.query = f'/search?{self.query_keys_page}=' + self.start + \
+                     f'&{self.query_keys_query}=' + self._query_line
+
+        self.cookies = self.config['Cookies']
+        self.get_cookies_file = self.cookies.get('COOKIES_INPUT')
+        self.set_cookies_file = self.cookies.get('COOKIES_OUTPUT')
+
+        self.output_excel_file = self.config['Output'].get('EXCEL')
+
+
+settings = Settings(file_path=os.path.join(BASE_DIR, 'config.ini'))
