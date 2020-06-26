@@ -8,7 +8,13 @@
 import scrapy
 
 
-class TutorialItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class GitHubLinksItem(scrapy.Item):
+    page = scrapy.item.Field(serializer=str)
+    data = scrapy.item.Field()
+
+
+class GitHubRepoInfoItem(scrapy.Item):
+    page = scrapy.item.Field(serializer=int)
+    link = scrapy.item.Field(serializer=int)
+    repo = scrapy.item.Field(serializer=str)
+    commit = scrapy.item.Field(serializer=str)
