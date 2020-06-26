@@ -8,7 +8,7 @@ import scrapy
 import openpyxl
 
 from ..settings import settings, BASE_DIR
-from ..items import GitHubRepoInfoItem
+from ..items import GitHubRepoInfoItem, GitHubLinksItem
 
 
 class GithubSpider(scrapy.Spider):
@@ -40,18 +40,10 @@ class GithubSpider(scrapy.Spider):
         self.limit = self.limit + self.start - 1
         self.login = settings.login if settings.login else None
         self.password = settings.password if settings.password else None
-        self.print_list = bool(json.loads(str(settings.print_list).lower()))
-        self.print_item = bool(json.loads(str(settings.print_item).lower()))
         self.domain = settings.domain or self.domain
         self.start_urls = [''.join([self.domain, settings.query])]
         self.get_cookies_path = os.path.join(BASE_DIR, settings.get_cookies_file) if settings.get_cookies_file else None
         self.set_cookies_path = os.path.join(BASE_DIR, settings.set_cookies_file) if settings.set_cookies_file else None
-        self.wb_path = os.path.join(BASE_DIR, settings.output_excel_file) if settings.output_excel_file else None
-        if self.wb_path:
-            wb = openpyxl.Workbook()
-            wb.save(self.wb_path)
-            wb.close()
-            self._fill_excel_with_data()
 
     def _init_with_console(self, login, password, start, limit, lists, items):
         self.start = start
@@ -86,18 +78,20 @@ class GithubSpider(scrapy.Spider):
                     callback=self._after_login,
                 )
             else:
+                self.logger.error('NOT LOGGED IN BECAUSE NO LOGIN AND PASSWORD WERE PRESENTED')
                 for url in self.start_urls:
                     yield scrapy.Request(url, dont_filter=True)
         else:
+            self.logger.info('SUCCESSFULLY LOGGED IN WITH COOKIES')
             self._write_cookies(response)
             for url in self.start_urls:
                 yield scrapy.Request(url, dont_filter=True)
 
     def _after_login(self, response):
         if self._auth_failed(response):
-            self.logger.error('Not logged in!')
+            self.logger.error('NOT LOGGED IN')
         else:
-            self.logger.info('Successfully logged in!')
+            self.logger.info('SUCCESSFULLY LOGGED IN WITH CREDENTIALS')
             self._write_cookies(response)
 
         for url in self.start_urls:
@@ -116,6 +110,7 @@ class GithubSpider(scrapy.Spider):
             with open(self.set_cookies_path, 'w') as set_cookie:
                 for cookie in site_cookies:
                     set_cookie.write(cookie + '\n')
+            self.logger.info('COOKIES ARE STORED')
 
     def _read_cookies(self):
         if hasattr(self, 'get_cookies_path') and self.get_cookies_path:
@@ -129,6 +124,11 @@ class GithubSpider(scrapy.Spider):
 
     def parse(self, response):
         next_page_url = response.css('a.next_page').xpath('@href').get()
+
+        [current_page] = [int(item.split('=')[1])
+                          for item in response.url.split('?')[1].split('&')
+                          if item.startswith('p=')]
+
         if next_page_url is not None:
             [self.next_page_number] = [int(item.split('=')[1])
                                        for item in next_page_url.split('?')[1].split('&')
@@ -140,9 +140,7 @@ class GithubSpider(scrapy.Spider):
             css('ul.repo-list li.public.source div.mt-n1 div.f4.text-normal a').\
             xpath('@href').getall()
 
-        if self.print_list:
-            with open(f'./output/links-page{self.next_page_number-1}.json', 'w') as links_json:
-                links_json.write(json.dumps(dict(data=repos_urls)))
+        yield GitHubLinksItem(page=current_page, data=repos_urls)
 
         for link_number, repo_url in enumerate(repos_urls, start=1):
             if repo_url not in self.visited_repos_urls:
@@ -165,22 +163,13 @@ class GithubSpider(scrapy.Spider):
         repo = response.url.split('github.com/')[1]
         if 'Cannot retrieve the latest commit at this time' not in response.text:
             repos_last_commit = response.css('a.link-gray.text-small::text').get()
-            commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
-            repos_data = GitHubRepoInfoItem(
+            commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else ''
+            yield GitHubRepoInfoItem(
                 page=page_number,
                 link=link_number,
                 repo=repo,
                 commit=commit,
             )
-
-            if self.print_item:
-                with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
-                    json_doc.write(str(repos_data))
-
-            if self.wb_path:
-                self._fill_excel_with_data(repos_data)
-
-            yield repos_data
 
         else:
             page_with_commits_url = response.css('ul.list-style-none.d-flex li.ml-3 a.link-gray-dark').xpath('@href').get()
@@ -194,33 +183,15 @@ class GithubSpider(scrapy.Spider):
 
     def parse_commits(self, response, page_number, link_number, repo):
         repos_last_commit = response.css('ol.commit-group.Box li.commit div.commit-links-group a.sha::text').get()  # !
-        commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else None
-        repos_data = GitHubRepoInfoItem(
+        commit = repos_last_commit.strip() if isinstance(repos_last_commit, str) else ''
+        yield GitHubRepoInfoItem(
             page=page_number,
             link=link_number,
             repo=repo,
             commit=commit,
         )
 
-        if self.print_item:
-            with open(f'./output/page{page_number}link{link_number}.json', 'w') as json_doc:
-                json_doc.write(str(repos_data))
-
-        if self.wb_path:
-            self._fill_excel_with_data(repos_data)
-
-        yield repos_data
-
     def _controller_sleep(self, seconds=30):
         self.crawler.engine.pause()
         time.sleep(seconds)
         self.crawler.engine.unpause()
-
-    def _fill_excel_with_data(self, data=None):
-        if data is None:
-            data = {'repo': 'link', 'commit': 'commit'}
-        wb = openpyxl.load_workbook(filename=self.wb_path)
-        ws = wb.active
-        ws.append([data.get('repo'), data.get('commit')])
-        wb.save(self.wb_path)
-        wb.close()

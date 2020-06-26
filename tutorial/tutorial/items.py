@@ -8,6 +8,11 @@
 import scrapy
 
 
+class GitHubLinksItem(scrapy.Item):
+    page = scrapy.item.Field(serializer=str)
+    data = scrapy.item.Field()
+
+
 class GitHubRepoInfoItem(scrapy.Item):
     page = scrapy.item.Field(serializer=int)
     link = scrapy.item.Field(serializer=int)
